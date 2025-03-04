@@ -39,6 +39,14 @@ try:
             height = tello.get_height()
             temp = tello.get_temperature()
             flight_time = tello.get_flight_time()
+            # Додаємо швидкість (якщо доступно)
+            speed = 0  # Замініть на tello.get_speed(), якщо доступно
+            
+            # Отримання даних гіроскопа
+            state = tello.get_current_state()
+            pitch = state.get('pitch', 0)
+            roll = state.get('roll', 0)
+            yaw = state.get('yaw', 0)
         else:
             # Контроль частоти кадрів для зображень з папки
             time_elapsed = current_time - prev_time
@@ -53,6 +61,13 @@ try:
             height = 0
             temp = 25
             flight_time = 0
+            speed = 0  # Заповнювач для швидкості
+            
+            # Симуляція даних гіроскопа для режиму без дрона
+            import math
+            pitch = 5 * math.sin(current_time * 0.5)  # Симуляція коливань
+            roll = 3 * math.cos(current_time * 0.7)
+            yaw = (current_time * 10) % 360  # Поступове обертання
         
         # Розрахунок та відображення FPS
         fps = 1 / (current_time - prev_time)
@@ -75,13 +90,6 @@ try:
         # Малювання штучного горизонту (індикатор рівня)
         horizon_width = 100
         horizon_y = center_y
-        if USE_DRONE:
-            # Якщо використовується дрон, тут можна отримати тангаж/крен
-            pitch = 0  # Замініть на tello.get_pitch(), якщо доступно
-            roll = 0   # Замініть на tello.get_roll(), якщо доступно
-        else:
-            pitch = 0
-            roll = 0
 
         # Малювання ліній горизонту
         cv2.line(frame, 
@@ -89,29 +97,76 @@ try:
                  (center_x + horizon_width, horizon_y + int(roll)), 
                  (0, 255, 0), 2)
 
-        # Малювання елементів HUD
-        # Фон лівої панелі
-        panel_width = 250
-        panel_height = 100
-        panel_margin = 10
-        cv2.rectangle(frame, 
-                      (panel_margin, panel_margin), 
-                      (panel_width, panel_height), 
-                      (0, 0, 0), -1)  # Заповнений прямокутник
-        cv2.rectangle(frame, 
-                      (panel_margin, panel_margin), 
-                      (panel_width, panel_height), 
-                      (255, 255, 255), 1)  # Рамка
+        panel_width = 250  
+        panel_height = 230 
+        panel_margin = 20
+        panel_x = panel_margin  
+        panel_y = panel_margin
 
-        # Статус батареї (колір змінюється залежно від рівня)
+        panel_overlay = frame.copy()
+        cv2.rectangle(panel_overlay, 
+                     (panel_x, panel_y), 
+                     (panel_x + panel_width, panel_y + panel_height), 
+                     (40, 40, 80), -1)  # Темно-синій фон
+
+        alpha = 0.7  
+        cv2.addWeighted(panel_overlay, alpha, frame, 1 - alpha, 0, frame)
+        
+        # Додавання рамки з градієнтом
+        cv2.rectangle(frame, 
+                     (panel_x, panel_y), 
+                     (panel_x + panel_width, panel_y + panel_height), 
+                     (100, 100, 180), 2)  # Світло-синя рамка
+        
+        # Кольори тексту
+        text_color = (220, 220, 240) 
+        highlight_color = (180, 255, 255) 
+        
+        # Заголовок панелі
+        cv2.putText(frame, "DRONE TELEMETRY", (panel_x + 25, panel_y + 25), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, highlight_color, 2)
+        
+        # Відображення інформації
+        # Швидкість
+        cv2.putText(frame, f"Speed:", (panel_x + 10, panel_y + 55), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, text_color, 1)
+        cv2.putText(frame, f"{speed} km/h", (panel_x + 150, panel_y + 55), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, highlight_color, 1)
+                   
+        # Батарея (колір змінюється залежно від рівня)
         battery_color = (0, 255, 0) if battery > 50 else (0, 165, 255) if battery > 20 else (0, 0, 255)
-        cv2.putText(frame, f"Battery: {battery}%", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, battery_color, 2)
-        # Висота (білий)
-        cv2.putText(frame, f"Height: {height}cm", (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-        # Температура (білий)
-        cv2.putText(frame, f"Temp: {temp}°C", (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-        # Час польоту (білий)
-        cv2.putText(frame, f"Flight Time: {flight_time}s", (10, 150), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+        cv2.putText(frame, f"Battery:", (panel_x + 10, panel_y + 85), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, text_color, 1)
+        cv2.putText(frame, f"{battery}%", (panel_x + 150, panel_y + 85), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, battery_color, 1)
+                   
+        # Висота
+        cv2.putText(frame, f"Altitude:", (panel_x + 10, panel_y + 115), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, text_color, 1)
+        cv2.putText(frame, f"{height} cm", (panel_x + 150, panel_y + 115), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, highlight_color, 1)
+                   
+        # Температура
+        cv2.putText(frame, f"Temperature:", (panel_x + 10, panel_y + 145), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, text_color, 1)
+        cv2.putText(frame, f"{temp}°C", (panel_x + 150, panel_y + 145), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, highlight_color, 1)
+        
+        # Додавання даних гіроскопа
+        cv2.putText(frame, f"Pitch:", (panel_x + 10, panel_y + 175), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, text_color, 1)
+        cv2.putText(frame, f"{pitch:.1f}°", (panel_x + 150, panel_y + 175), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, highlight_color, 1)
+                   
+        cv2.putText(frame, f"Roll:", (panel_x + 10, panel_y + 205), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, text_color, 1)
+        cv2.putText(frame, f"{roll:.1f}°", (panel_x + 150, panel_y + 205), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, highlight_color, 1)
+                   
+        cv2.putText(frame, f"Yaw:", (panel_x + 10, panel_y + 235), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, text_color, 1)
+        cv2.putText(frame, f"{yaw:.1f}°", (panel_x + 150, panel_y + 235), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, highlight_color, 1)
 
         # Малювання сторін світу
         directions = ['N', 'E', 'S', 'W']
@@ -134,4 +189,4 @@ finally:
     # Безпечне закриття відеопотоку та всіх відкритих вікон
     if USE_DRONE:
         tello.streamoff()
-    cv2.destroyAllWindows() 
+    cv2.destroyAllWindows()
